@@ -1,0 +1,231 @@
+# -*- coding: utf-8 -*-
+import qpy
+import androidhelper
+import urllib.request as ur
+import os
+import subprocess
+from qsl4ahelper.fullscreenwrapper2 import *
+
+droid = androidhelper.Android()
+
+class MainScreen(Layout):
+    def __init__(self):
+        super(MainScreen, self).__init__(str("""<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF"
+    android:orientation="vertical"
+    android:padding="20dp"
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Digite o link do YouTube:"
+        android:textSize="18sp"
+        android:textColor="#333333"
+        android:gravity="center"
+        android:paddingBottom="8dp"
+    />
+    
+    <EditText
+        android:id="@+id/video_url"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="URL do vídeo"
+        android:padding="12dp"
+        android:background="@drawable/rounded_border"
+        android:textColor="#333333"
+    />
+    
+    <RadioGroup
+        android:id="@+id/format_group"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp">
+        
+        <RadioButton
+            android:id="@+id/rb_mp4"
+            android:text="MP4"
+            android:textColor="#333333"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+        
+        <RadioButton
+            android:id="@+id/rb_mp3"
+            android:text="MP3"
+            android:textColor="#333333"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"/>
+    </RadioGroup>
+    
+    <Button
+        android:id="@+id/but_download"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Baixar Vídeo"
+        android:textSize="16sp"
+        android:textColor="#ffffff"
+        android:background="#000000"
+        android:layout_marginTop="16dp"
+        android:padding="14dp"
+        android:layout_gravity="center"
+        android:radius="8dp"
+    />
+    
+    <Button
+        android:id="@+id/but_download2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Baixar Vídeo 2"
+        android:textSize="16sp"
+        android:background="@drawable/button_gradient"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="16dp"
+        android:padding="14dp"
+        android:layout_gravity="center"
+        android:radius="8dp"
+    />
+    
+    <Button
+        android:id="@+id/but_clear"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Limpar"
+        android:textSize="16sp"
+        android:background="#000000"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="16dp"
+        android:padding="14dp"
+        android:layout_gravity="center"
+        android:radius="8dp"
+    />
+    
+    <Button
+        android:id="@+id/but_exit"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Sair"
+        android:textSize="16sp"
+        android:background="#000000"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="16dp"
+        android:padding="14dp"
+        android:layout_gravity="center"
+        android:radius="8dp"
+    />
+    
+    <TextView
+        android:id="@+id/status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="14sp"
+        android:textColor="#333333"
+        android:gravity="center"
+        android:paddingTop="16dp"
+    />
+</LinearLayout>
+"""), "SL4AApp")
+
+    def on_show(self):
+        # Adicionando os eventos aos botões
+        self.views.but_download.add_event(click_EventHandler(self.views.but_download, self.download_video))
+        self.views.but_download2.add_event(click_EventHandler(self.views.but_download2, self.download_video2))
+        self.views.but_exit.add_event(click_EventHandler(self.views.but_exit, self.exit_app))
+        self.views.but_clear.add_event(click_EventHandler(self.views.but_clear, self.clear_content))
+
+    def on_close(self):
+        pass
+
+    def download_video(self, view, dummy):
+        self.download_video_action(view)
+
+    def download_video2(self, view, dummy):
+        self.download_video_action(view)
+
+    def download_video_action(self, view):
+        url = self.views.video_url.text
+        if not url:
+            droid.makeToast("Por favor, insira o link do YouTube")
+            return
+
+        # Verificar se o formato selecionado é MP3 ou MP4
+        if self.views.rb_mp4.isChecked:
+            format_choice = 'mp4'
+        elif self.views.rb_mp3.isChecked:
+            format_choice = 'mp3'
+        else:
+            format_choice = 'mp4'  # Default para MP4
+
+        self.views.status.text = "Baixando..."
+        self.update_ui()
+
+        # Solicitar permissão de armazenamento
+        self.request_permissions()
+
+        # Defina o caminho onde o vídeo será salvo, na pasta 'Movies'
+        save_path = "/sdcard/Movies/"
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+
+        # Usar o ID do vídeo como nome do arquivo
+        file_name = url.split("v=")[-1] + f".{format_choice}"
+        file_path = os.path.join(save_path, file_name)
+
+        # Verifique se yt-dlp está instalado
+        try:
+            subprocess.check_call(["yt-dlp", "--version"])
+        except subprocess.CalledProcessError:
+            self.views.status.text = "yt-dlp não está instalado!"
+            self.update_ui()
+            return
+
+        # Comando para baixar o vídeo
+        command = f"yt-dlp -f bestaudio[ext={format_choice}] --merge-output-format {format_choice} -o {file_path} {url}"
+        try:
+            subprocess.run(command, shell=True, check=True)
+            self.views.status.text = f"Vídeo {format_choice.upper()} baixado com sucesso em: {file_path}"
+
+            # Notificar o Android para adicionar o arquivo à galeria
+            droid.mediaScanFile(file_path)
+            self.views.status.text += "\nVídeo adicionado à galeria."
+
+        except subprocess.CalledProcessError:
+            self.views.status.text = "Erro ao baixar o vídeo."
+        
+        self.update_ui()
+
+    def request_permissions(self):
+        # Solicitar permissões de leitura e gravação no armazenamento
+        permissions = ['android.permission.WRITE_EXTERNAL_STORAGE', 'android.permission.READ_EXTERNAL_STORAGE']
+        grant = droid.requestPermissions(permissions)
+        
+        if grant.result != 0:
+            self.views.status.text = "Permissões não concedidas. O aplicativo precisa de permissão de armazenamento."
+            self.update_ui()
+
+    def exit_app(self, view, dummy):
+        droid.makeToast("Saindo do aplicativo...")
+        FullScreenWrapper2App.close_layout()
+
+    def clear_content(self, view, dummy):
+        # Limpar os campos de texto e o status
+        self.views.status.text = ""
+        self.views.video_url.text = ""
+        self.views.rb_mp4.isChecked = False
+        self.views.rb_mp3.isChecked = False
+        droid.makeToast("Conteúdo Limpo")
+
+    def update_ui(self):
+        # Atualize a interface com o status
+        self.views.status.text = self.views.status.text
+        self.update_layout()
+
+if __name__ == '__main__':
+    FullScreenWrapper2App.initialize(droid)
+    FullScreenWrapper2App.show_layout(MainScreen())
+    FullScreenWrapper2App.eventloop()
